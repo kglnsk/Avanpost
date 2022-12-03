@@ -16,8 +16,32 @@ from .models import CategoryModel, PhotoModel
 from .serializers import CategorySerializer, PhotoSerializer
 from icrawler.builtin import GoogleImageCrawler
 
+import torch
+import clip
+from PIL import Image
 
 host_url = "https://web-production-0241.up.railway.app"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model, preprocess = clip.load("RN50", device=device)
+THRESHOLD = 0.5
+categories = ['snowboard','skateboard','truck','car','train','horse','lawnmower','ski','snowmobile','dump truck', 'van']
+
+def predict_image_from_path(path):
+    image = preprocess(Image.open(path)).unsqueeze(0).to(device)
+    text = clip.tokenize(categories).to(device)
+    with torch.no_grad():
+        image_features = model.encode_image(image)
+        text_features = model.encode_text(text)
+    
+        logits_per_image, logits_per_text = model(image, text)
+        probs = logits_per_image.softmax(dim=-1).cpu().numpy()
+        labels = []
+        for i,prob in enumerate(probs):
+            if prob>=THRESHOLD:
+                labels.append(categories[i])
+            
+    return labels
+
 
 
 def find_photos(category, num):
@@ -36,33 +60,37 @@ def find_photos(category, num):
 @api_view(['POST'])
 def start_neuron(request):
     if request.method == "POST":
-        image_path = os.chdir("../../mediafiles/images/tests")
-        img_urls = request.data['data'].split(',')
-        img_urls = [img_url.strip() for img_url in img_urls]
-
-        # Сюда вставлять нейронку, которая будет проверятся на тестовых фотках
-        # image_path - директория где находятся все фотки
-        try:
-            shutil.rmtree(image_path)
-        except:
-            pass
-    return HttpResponse("Ответ нейронки")
+        print(request.data)
+        img_urls = []
 
 @api_view(['GET', 'POST'])
 def save_photo(request):
     """
     List all code snippets, or create a new snippet.
     """
+    if request.method == "GET":
+        photo_path = "/home/kirill/outsource_project/AvanpostHak/mediafiles/images/tests"
+        # Сюда вставлять нейронку, которая будет проверятся на тестовых фотках
+        # photo_path - директория где находятся все фотки
+        answer_dict = {}
+        for filename in os.listdir(photo_path):
+            if ".jpg" in filename.lower():
+                labels = predict_image_from_path(os.path.join(filename,photo_path))
+                answer_dict[filename] = labels
+        
+        try:
+            shutil.rmtree(photo_path)
+        except:
+            pass
+        return HttpResponse(answer_dict)
+
 
     if request.method == 'POST':
         serializer = PhotoSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            imageUrl = host_url + serializer.data['imageUrl']
-            response = {'imageUrl': imageUrl}
-            return Response(response)
 
-    return HttpResponse("Error")
+    return HttpResponse("Not ok")
 
 
 @api_view(['GET', 'POST'])
@@ -74,25 +102,17 @@ def take_category(request):
         snippets = CategoryModel.objects.all()
         serializer = CategorySerializer(snippets, many=True)
         for object in serializer.data:
-            object['imageUrl'] = host_url + object['imageUrl']
-        results = {"categories": serializer.data}
+            object['image_url'] = host_url + object['image_url']
+        results = {"categories" : serializer.data}
         return Response(results)
 
     elif request.method == 'POST':
         serializer = CategorySerializer(data=request.data)
-        print(request.data)
-        print(serializer.is_valid())
         if serializer.is_valid():
             serializer.save()
-
-            category = serializer.data['name']
+            category = serializer.data['category']
 
             paths = find_photos(category, 5)
-            serializer.data['imageUrl'] = paths[0]
-            print(paths[0])
-
-            print(serializer.data)
-            serializer.validated_data.get("imageUrl")
             # Сюда вставалять нейронку category - это категория в формате строк Пример: 'bus',
             # paths - это путь до картинок, Пример: mediafiles/images/{category}/0000001
     return HttpResponse("ok")
