@@ -26,12 +26,6 @@ model, preprocess = clip.load("RN50", device=device)
 THRESHOLD = 0.5
 categories = ['snowboard','skateboard','truck','car','train','horse','lawnmower','ski','snowmobile','dump truck', 'van']
 
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model, preprocess = clip.load("RN50", device=device)
-THRESHOLD = 0.5
-categories = ['snowboard','skateboard','truck','car','train','horse','lawnmower','ski','snowmobile','dump truck', 'van']
-
 def predict_image_from_path(path):
     image = preprocess(Image.open(path)).unsqueeze(0).to(device)
     text = clip.tokenize(categories).to(device)
