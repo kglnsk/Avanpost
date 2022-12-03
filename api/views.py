@@ -26,6 +26,12 @@ model, preprocess = clip.load("RN50", device=device)
 THRESHOLD = 0.5
 categories = ['snowboard','skateboard','truck','car','train','horse','lawnmower','ski','snowmobile','dump truck', 'van']
 
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model, preprocess = clip.load("RN50", device=device)
+THRESHOLD = 0.5
+categories = ['snowboard','skateboard','truck','car','train','horse','lawnmower','ski','snowmobile','dump truck', 'van']
+
 def predict_image_from_path(path):
     image = preprocess(Image.open(path)).unsqueeze(0).to(device)
     text = clip.tokenize(categories).to(device)
@@ -34,13 +40,14 @@ def predict_image_from_path(path):
         text_features = model.encode_text(text)
     
         logits_per_image, logits_per_text = model(image, text)
-        probs = logits_per_image.softmax(dim=-1).cpu().numpy()
+        probs = list(logits_per_image.softmax(dim=-1).cpu().numpy().flatten())
         labels = []
         for i,prob in enumerate(probs):
             if prob>=THRESHOLD:
                 labels.append(categories[i])
             
     return labels
+
 
 
 
